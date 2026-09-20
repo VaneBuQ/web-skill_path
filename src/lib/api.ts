@@ -1,0 +1,219 @@
+/**
+ * Cliente de la API de SkillPath.
+ *
+ * Todos los errores llegan con el mismo envelope
+ * `{ error: { code, message, details } }`, y `message` ya viene en español y
+ * apto para mostrarse tal cual: por eso `ApiError` lo expone directamente y
+ * las pantallas no tienen que traducir códigos.
+ */
+
+import type {
+  Deck,
+  DeckDetail,
+  DueCards,
+  FollowResult,
+  FollowedTopic,
+  NewCard,
+  Profile,
+  ProgressOverview,
+  Quiz,
+  QuizResult,
+  Rating,
+  Session,
+  Topic,
+  TopicProgress,
+} from "./types";
+
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly details?: Record<string, unknown>;
+
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+
+  /** Cierra la sesión: el token venció o ya no vale. */
+  get isUnauthenticated(): boolean {
+    return this.status === 401;
+  }
+}
+
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
+interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  query?: Record<string, string | number | undefined>;
+  auth?: boolean;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { method = "GET", body, query, auth = true } = options;
+
+  let url = `${BASE_URL}${path}`;
+  if (query) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    }
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+  }
+
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (auth && authToken) headers.Authorization = `Bearer ${authToken}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    // Sin red o con la API caída no hay envelope que leer.
+    throw new ApiError(
+      0,
+      "NETWORK_ERROR",
+      "No pudimos conectar con el servidor. Revisa tu conexión.",
+    );
+  }
+
+  if (response.status === 204) return undefined as T;
+
+  const text = await response.text();
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const envelope = (payload as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | null)?.error;
+    throw new ApiError(
+      response.status,
+      envelope?.code ?? "UNKNOWN_ERROR",
+      envelope?.message ?? "Ocurrió un error inesperado.",
+      envelope?.details,
+    );
+  }
+
+  return payload as T;
+}
+
+export const api = {
+  // --- auth ---------------------------------------------------------------
+  register: (name: string, email: string, password: string) =>
+    request<Session>("/auth/register", {
+      method: "POST",
+      body: { name, email, password },
+      auth: false,
+    }),
+
+  login: (email: string, password: string) =>
+    request<Session>("/auth/login", {
+      method: "POST",
+      body: { email, password },
+      auth: false,
+    }),
+
+  me: () => request<Profile>("/auth/me"),
+
+  // --- temas --------------------------------------------------------------
+  topics: (search?: string) =>
+    request<{ items: Topic[] }>("/topics", { query: { search }, auth: false }),
+
+  followTopic: (topicId: string) =>
+    request<FollowResult>(`/topics/${topicId}/follow`, { method: "POST" }),
+
+  unfollowTopic: (topicId: string) =>
+    request<void>(`/topics/${topicId}/follow`, { method: "DELETE" }),
+
+  myTopics: () => request<{ items: FollowedTopic[] }>("/me/topics"),
+
+  // --- mazos propios (historia 8) ----------------------------------------
+  myDecks: () => request<{ items: Deck[] }>("/me/decks"),
+
+  deck: (topicId: string) => request<DeckDetail>(`/me/decks/${topicId}`),
+
+  createDeck: (name: string, description: string | null, cards: NewCard[]) =>
+    request<Deck>("/me/decks", {
+      method: "POST",
+      body: { name, description, cards },
+    }),
+
+  renameDeck: (topicId: string, name: string, description?: string | null) =>
+    request<Deck>(`/me/decks/${topicId}`, {
+      method: "PATCH",
+      body: { name, description },
+    }),
+
+  deleteDeck: (topicId: string) =>
+    request<void>(`/me/decks/${topicId}`, { method: "DELETE" }),
+
+  addCards: (topicId: string, cards: NewCard[]) =>
+    request<{ topicId: string; cardCount: number }>(`/me/decks/${topicId}/cards`, {
+      method: "POST",
+      body: { cards },
+    }),
+
+  deleteCard: (topicId: string, cardId: string) =>
+    request<void>(`/me/decks/${topicId}/cards/${cardId}`, { method: "DELETE" }),
+
+  // --- repaso -------------------------------------------------------------
+  dueCards: (topicId: string, options?: { cardIds?: string[]; limit?: number }) =>
+    request<DueCards>(`/flashcards/${topicId}`, {
+      query: {
+        cardIds: options?.cardIds?.join(","),
+        limit: options?.limit,
+      },
+    }),
+
+  review: (cardId: string, topicId: string, rating: Rating) =>
+    request<import("./types").ReviewResult>(`/flashcards/${cardId}/review`, {
+      method: "POST",
+      body: { topicId, rating },
+    }),
+
+  // --- progreso -----------------------------------------------------------
+  progress: () => request<ProgressOverview>("/progress"),
+
+  topicProgress: (topicId: string) =>
+    request<TopicProgress>(`/progress/${topicId}`),
+
+  // --- quiz ---------------------------------------------------------------
+  startQuiz: (topicId: string) =>
+    request<Quiz>(`/quiz/${topicId}/start`, { method: "POST" }),
+
+  submitQuiz: (
+    quizId: string,
+    answers: { questionId: string; selected: string | null }[],
+    durationSeconds: number,
+  ) =>
+    request<QuizResult>(`/quiz/${quizId}/submit`, {
+      method: "POST",
+      body: { answers, durationSeconds },
+    }),
+
+  quiz: (quizId: string) => request<Quiz & Partial<QuizResult>>(`/quiz/${quizId}`),
+};
