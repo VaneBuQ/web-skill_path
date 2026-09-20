@@ -53,6 +53,8 @@ web-skill_path/
 │   ├── test/               # pruebas de componentes y del cliente
 │   ├── App.tsx             # rutas
 │   └── main.tsx
+├── scripts/check-build.mjs # revisa dist/ antes de publicarlo
+├── docs/despliegue-frontend.md
 ├── .env.example
 └── tailwind.config.js
 ```
@@ -79,9 +81,33 @@ Otros comandos:
 | Comando | Qué hace |
 |---|---|
 | `npm run build` | Comprueba tipos y genera `dist/` |
+| `npm run deploy` | Compila y revisa que el build sea publicable |
 | `npm run preview` | Sirve el build de producción |
 | `npm test` | Ejecuta las pruebas |
 | `npm run test:watch` | Pruebas en modo vigilancia |
+
+## Despliegue
+
+Se hace **a mano en la consola de AWS**, siguiendo
+[`docs/despliegue-frontend.md`](docs/despliegue-frontend.md): un bucket de S3 privado
+detrás de CloudFront, con Origin Access Control.
+
+```bash
+npm run deploy
+```
+
+Ese comando compila y después comprueba el resultado. La revisión importa porque
+**Vite incrusta `VITE_API_BASE_URL` al compilar, no al ejecutarse**: compilar sin
+`.env` produce un sitio que parece correcto y falla en cada llamada. El comprobador
+lo detecta antes de subir nada.
+
+Dos cosas que rompen el despliegue y no son evidentes:
+
+- Hay que configurar **respuestas de error personalizadas** en CloudFront (403 y 404
+  → `/index.html` con código 200). Sin eso, la aplicación funciona al navegar pero se
+  rompe al recargar cualquier ruta.
+- El `CORS_ORIGIN` de las seis funciones Lambda y el CORS de API Gateway deben llevar
+  **exactamente** el dominio de CloudFront, sin barra final.
 
 ## Pruebas
 
