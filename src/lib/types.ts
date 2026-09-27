@@ -87,6 +87,10 @@ export interface TopicProgress {
   cardsPending: number;
   percent: number;
   lastStudiedAt: string | null;
+  /** Tema dominado: se consigue aprobando el examen, no repasando. */
+  mastered?: boolean;
+  masteredAt?: string | null;
+  lastExamScore?: number | null;
   xpTotal?: number;
   streakDays?: number;
 }
@@ -100,6 +104,7 @@ export interface ProgressSummary {
   masteryPercent: number;
   cardsMastered: number;
   cardsTotal: number;
+  topicsMastered: number;
 }
 
 export interface ProgressOverview {
@@ -121,6 +126,7 @@ export interface QuizQuestion {
 
 export interface Quiz {
   quizId: string;
+  passCorrect: number;
   topicId: string;
   topicName: string | null;
   questionCount: number;
@@ -147,6 +153,8 @@ export interface ConceptToReview {
 
 export interface QuizResult {
   quizId: string;
+  passed: boolean;
+  passCorrect: number;
   topicId: string;
   topicName: string | null;
   score: number;
@@ -184,6 +192,33 @@ export interface NewCard {
   question: string;
   answer: string;
   hint?: string | null;
+}
+
+/** Veredicto de la IA sobre una respuesta escrita. */
+export type Verdict = "correcta" | "parcial" | "incorrecta";
+
+export interface AnswerCheck {
+  cardId: string;
+  topicId: string;
+  /** Lo que escribió el usuario. */
+  yourAnswer: string;
+  /** La respuesta de la tarjeta, que el servicio toma de su propia tabla. */
+  correctAnswer: string;
+  verdict: Verdict;
+  score: number;
+  /** Explicación breve, de 40 palabras como máximo. */
+  feedback: string;
+  /** La IA propone la calificación; decide el usuario. */
+  suggestedRating: Rating;
+  checkedAt: string;
+}
+
+/** Límites que impone el servicio de IA. */
+export const AI_MAX_ANSWER_WORDS = 60;
+
+export interface QuizResultExtras {
+  passed: boolean;
+  passCorrect: number;
 }
 
 /** Detalle del error 409 cuando faltan conceptos para el quiz. */

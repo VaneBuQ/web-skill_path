@@ -15,8 +15,10 @@ import { QuizPicker } from "./pages/QuizPicker";
 import { Review } from "./pages/Review";
 import { ReviewPicker } from "./pages/ReviewPicker";
 import { SignIn } from "./pages/SignIn";
+import { Settings } from "./pages/Settings";
 import { SignUp } from "./pages/SignUp";
 import { ApiError } from "./lib/api";
+import { isConfigured } from "./lib/config";
 import { AuthProvider, useAuth } from "./lib/auth";
 
 const queryClient = new QueryClient({
@@ -43,6 +45,15 @@ function Protegida({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Sin las URLs de las APIs no se puede hacer nada: se pide configurarlas. */
+function ExigeConfiguracion({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  if (!isConfigured() && location.pathname !== "/configuracion") {
+    return <Settings standalone />;
+  }
+  return <>{children}</>;
+}
+
 /** La landing y el login no tienen sentido con la sesión ya iniciada. */
 function SoloInvitados({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -53,12 +64,13 @@ function SoloInvitados({ children }: { children: ReactNode }) {
 
 function Rutas() {
   return (
-    <Routes>
-      <Route path="/" element={<SoloInvitados><Landing /></SoloInvitados>} />
-      <Route path="/entrar" element={<SoloInvitados><SignIn /></SoloInvitados>} />
-      <Route path="/crear-cuenta" element={<SoloInvitados><SignUp /></SoloInvitados>} />
+    <ExigeConfiguracion>
+        <Routes>
+        <Route path="/" element={<SoloInvitados><Landing /></SoloInvitados>} />
+        <Route path="/entrar" element={<SoloInvitados><SignIn /></SoloInvitados>} />
+        <Route path="/crear-cuenta" element={<SoloInvitados><SignUp /></SoloInvitados>} />
 
-      <Route element={<Protegida><AppLayout /></Protegida>}>
+        <Route element={<Protegida><AppLayout /></Protegida>}>
         <Route path="/inicio" element={<Home />} />
         <Route path="/explorar" element={<Explore />} />
         <Route path="/progreso" element={<Progress />} />
@@ -67,17 +79,19 @@ function Rutas() {
         <Route path="/mis-mazos" element={<Decks />} />
         <Route path="/mis-mazos/nuevo" element={<DeckNew />} />
         <Route path="/mis-mazos/:topicId" element={<DeckDetail />} />
-      </Route>
+        <Route path="/configuracion" element={<Settings />} />
+        </Route>
 
       {/* Estudiar y responder el quiz usan un marco sin navegación, para no
           distraer a media sesión. */}
-      <Route element={<Protegida><FocusLayout /></Protegida>}>
+        <Route element={<Protegida><FocusLayout /></Protegida>}>
         <Route path="/repasar/:topicId" element={<Review />} />
         <Route path="/quiz/:topicId" element={<Quiz />} />
-      </Route>
+        </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ExigeConfiguracion>
   );
 }
 

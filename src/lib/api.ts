@@ -7,7 +7,9 @@
  * las pantallas no tienen que traducir códigos.
  */
 
+import { apiBase, type ServiceKey } from "./config";
 import type {
+  AnswerCheck,
   Deck,
   DeckDetail,
   DueCards,
@@ -23,8 +25,6 @@ import type {
   Topic,
   TopicProgress,
 } from "./types";
-
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   readonly status: number;
@@ -63,10 +63,27 @@ interface RequestOptions {
   auth?: boolean;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/**
+ * Cada microservicio tiene su propio API Gateway, así que la URL base se
+ * resuelve por servicio en el momento de la llamada.
+ */
+async function request<T>(
+  service: ServiceKey,
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const { method = "GET", body, query, auth = true } = options;
 
-  let url = `${BASE_URL}${path}`;
+  const base = apiBase(service);
+  if (!base) {
+    throw new ApiError(
+      0,
+      "NOT_CONFIGURED",
+      "Falta configurar la URL del servicio. Ve a Configuración.",
+    );
+  }
+
+  let url = `${base}${path}`;
   if (query) {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
@@ -124,65 +141,65 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export const api = {
   // --- auth ---------------------------------------------------------------
   register: (name: string, email: string, password: string) =>
-    request<Session>("/auth/register", {
+    request<Session>("auth", "/auth/register", {
       method: "POST",
       body: { name, email, password },
       auth: false,
     }),
 
   login: (email: string, password: string) =>
-    request<Session>("/auth/login", {
+    request<Session>("auth", "/auth/login", {
       method: "POST",
       body: { email, password },
       auth: false,
     }),
 
-  me: () => request<Profile>("/auth/me"),
+  me: () => request<Profile>("auth", "/auth/me"),
 
   // --- temas --------------------------------------------------------------
   topics: (search?: string) =>
-    request<{ items: Topic[] }>("/topics", { query: { search }, auth: false }),
+    request<{ items: Topic[] }>("topics", "/topics", { query: { search }, auth: false }),
 
   followTopic: (topicId: string) =>
-    request<FollowResult>(`/topics/${topicId}/follow`, { method: "POST" }),
+    request<FollowResult>("topics", `/topics/${topicId}/follow`, { method: "POST" }),
 
   unfollowTopic: (topicId: string) =>
-    request<void>(`/topics/${topicId}/follow`, { method: "DELETE" }),
+    request<void>("topics", `/topics/${topicId}/follow`, { method: "DELETE" }),
 
-  myTopics: () => request<{ items: FollowedTopic[] }>("/me/topics"),
+  myTopics: () => request<{ items: FollowedTopic[] }>("topics", "/me/topics"),
 
   // --- mazos propios (historia 8) ----------------------------------------
-  myDecks: () => request<{ items: Deck[] }>("/me/decks"),
+  myDecks: () => request<{ items: Deck[] }>("topics", "/me/decks"),
 
-  deck: (topicId: string) => request<DeckDetail>(`/me/decks/${topicId}`),
+  deck: (topicId: string) => request<DeckDetail>("topics", `/me/decks/${topicId}`),
 
   createDeck: (name: string, description: string | null, cards: NewCard[]) =>
-    request<Deck>("/me/decks", {
+    request<Deck>("topics", "/me/decks", {
       method: "POST",
       body: { name, description, cards },
     }),
 
   renameDeck: (topicId: string, name: string, description?: string | null) =>
-    request<Deck>(`/me/decks/${topicId}`, {
+    request<Deck>("topics", `/me/decks/${topicId}`, {
       method: "PATCH",
       body: { name, description },
     }),
 
   deleteDeck: (topicId: string) =>
-    request<void>(`/me/decks/${topicId}`, { method: "DELETE" }),
+    request<void>("topics", `/me/decks/${topicId}`, { method: "DELETE" }),
 
   addCards: (topicId: string, cards: NewCard[]) =>
-    request<{ topicId: string; cardCount: number }>(`/me/decks/${topicId}/cards`, {
+    request<{ topicId: string; cardCount: number }>("topics", `/me/decks/${topicId}/cards`, {
       method: "POST",
       body: { cards },
     }),
 
   deleteCard: (topicId: string, cardId: string) =>
-    request<void>(`/me/decks/${topicId}/cards/${cardId}`, { method: "DELETE" }),
+    request<void>("topics", `/me/decks/${topicId}/cards/${cardId}`, { method: "DELETE" }),
 
   // --- repaso -------------------------------------------------------------
   dueCards: (topicId: string, options?: { cardIds?: string[]; limit?: number }) =>
-    request<DueCards>(`/flashcards/${topicId}`, {
+    request<DueCards>("flashcards", `/flashcards/${topicId}`, {
       query: {
         cardIds: options?.cardIds?.join(","),
         limit: options?.limit,
@@ -190,30 +207,41 @@ export const api = {
     }),
 
   review: (cardId: string, topicId: string, rating: Rating) =>
-    request<import("./types").ReviewResult>(`/flashcards/${cardId}/review`, {
+    request<import("./types").ReviewResult>("flashcards", `/flashcards/${cardId}/review`, {
       method: "POST",
       body: { topicId, rating },
     }),
 
   // --- progreso -----------------------------------------------------------
-  progress: () => request<ProgressOverview>("/progress"),
+  progress: () => request<ProgressOverview>("progress", "/progress"),
 
   topicProgress: (topicId: string) =>
-    request<TopicProgress>(`/progress/${topicId}`),
+    request<TopicProgress>("progress", `/progress/${topicId}`),
 
   // --- quiz ---------------------------------------------------------------
   startQuiz: (topicId: string) =>
-    request<Quiz>(`/quiz/${topicId}/start`, { method: "POST" }),
+    request<Quiz>("quiz", `/quiz/${topicId}/start`, { method: "POST" }),
 
   submitQuiz: (
     quizId: string,
     answers: { questionId: string; selected: string | null }[],
     durationSeconds: number,
   ) =>
-    request<QuizResult>(`/quiz/${quizId}/submit`, {
+    request<QuizResult>("quiz", `/quiz/${quizId}/submit`, {
       method: "POST",
       body: { answers, durationSeconds },
     }),
 
-  quiz: (quizId: string) => request<Quiz & Partial<QuizResult>>(`/quiz/${quizId}`),
+  quiz: (quizId: string) =>
+    request<Quiz & Partial<QuizResult>>("quiz", `/quiz/${quizId}`),
+
+  // --- IA: comprueba la respuesta escrita --------------------------------
+  checkAnswer: (topicId: string, cardId: string, answer: string) =>
+    request<AnswerCheck>("ia", "/ia/check-answer", {
+      method: "POST",
+      body: { topicId, cardId, answer },
+    }),
+
+  answerHistory: (topicId: string) =>
+    request<{ topicId: string; items: AnswerCheck[] }>("ia", `/ia/history/${topicId}`),
 };

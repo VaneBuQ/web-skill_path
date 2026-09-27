@@ -11,6 +11,7 @@ const NAV = [
   { to: "/repasar", label: "Repasar" },
   { to: "/mis-mazos", label: "Mis mazos" },
   { to: "/progreso", label: "Mi progreso" },
+  { to: "/configuracion", label: "Configuración" },
 ];
 
 function navClass({ isActive }: { isActive: boolean }): string {

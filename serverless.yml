@@ -1,0 +1,64 @@
+# Despliegue del frontend: bucket S3 público con alojamiento de sitio estático.
+#
+# Se usa S3 público y no CloudFront porque en AWS Academy Learner Lab
+# CloudFront no suele estar disponible y no se pueden crear roles de IAM.
+# Es el mismo enfoque del proyecto de ejemplo de la clínica.
+#
+# IMPORTANTE: cambia `org` por tu cuenta de Serverless Dashboard.
+
+org: deborajeronimo
+app: skillpath
+service: web
+
+plugins:
+  - serverless-s3-sync
+
+provider:
+  name: aws
+  region: us-east-1
+  stage: dev
+  iam:
+    role: arn:aws:iam::${aws:accountId}:role/LabRole
+
+custom:
+  siteName: skillpath-web-${sls:stage}-${aws:accountId}
+  s3Sync:
+    # Se sube el resultado de `npm run build`, no el código fuente.
+    - bucketName: ${self:custom.siteName}
+      localDir: dist
+
+resources:
+  Resources:
+    WebAppBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.siteName}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          # La aplicación resuelve las rutas en el navegador, así que
+          # cualquier ruta desconocida debe devolver el index y dejar que
+          # React Router decida. Sin esto, recargar en /progreso da error.
+          ErrorDocument: index.html
+    WebAppBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: ${self:custom.siteName}
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PublicRead
+              Effect: Allow
+              Principal: "*"
+              Action:
+                - s3:GetObject
+              Resource: arn:aws:s3:::${self:custom.siteName}/*
+
+  Outputs:
+    WebsiteUrl:
+      Description: URL pública del sitio
+      Value: !GetAtt WebAppBucket.WebsiteURL

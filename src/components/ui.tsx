@@ -1,5 +1,6 @@
 /** Piezas de interfaz compartidas, con los tokens del prototipo. */
 
+import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 import { Link } from "react-router-dom";
 
@@ -121,9 +122,17 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return <input {...props} className={cx(FIELD, className)} />;
 }
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cx(FIELD, "min-h-[68px] leading-relaxed", className)} />;
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className, ...props }, ref) {
+    return (
+      <textarea
+        {...props}
+        ref={ref}
+        className={cx(FIELD, "min-h-[68px] leading-relaxed", className)}
+      />
+    );
+  },
+);
 
 // --- Estados -----------------------------------------------------------------
 
