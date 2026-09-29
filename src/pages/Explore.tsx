@@ -9,6 +9,7 @@ import {
   EmptyState,
   ErrorState,
   Input,
+  LinkButton,
   Loading,
   PageHeader,
 } from "../components/ui";
@@ -50,7 +51,7 @@ export function Explore() {
       />
 
       <div className="relative">
-        <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-body" />
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-body" />
         <Input
           type="search"
           value={search}
@@ -72,10 +73,26 @@ export function Explore() {
       ) : catalogo.isError ? (
         <ErrorState message="No pudimos cargar el catálogo." onRetry={catalogo.refetch} />
       ) : catalogo.data!.items.length === 0 ? (
-        <EmptyState
-          title="Sin resultados"
-          description={`No encontramos temas que coincidan con «${search}».`}
-        />
+        // Sin búsqueda, un catálogo vacío no es «sin resultados»: es que nadie
+        // ha cargado el catálogo todavía. Decir lo primero manda a buscar algo
+        // que no existe; decir lo segundo lleva a la salida correcta.
+        search ? (
+          <EmptyState
+            title="Sin resultados"
+            description={`No encontramos temas que coincidan con «${search}».`}
+            action={
+              <Button variant="ghost" size="sm" onClick={() => setSearch("")}>
+                Ver todos los temas
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="El catálogo está vacío"
+            description="Todavía no hay temas publicados. Mientras tanto puedes crear tu propio mazo con tus apuntes y estudiarlo igual."
+            action={<LinkButton to="/mis-mazos/nuevo">Crear mi primer mazo</LinkButton>}
+          />
+        )
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {catalogo.data!.items.map((tema) => {

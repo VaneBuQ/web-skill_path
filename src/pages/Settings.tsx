@@ -9,10 +9,12 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "../components/icons";
-import { Button, Card, Field, Input, PageHeader } from "../components/ui";
+import { Button, Card, Field, Input, PageHeader, cx } from "../components/ui";
+import { type PingResult, ping } from "../lib/api";
 import {
   SERVICES,
   type ApiConfig,
+  type ServiceKey,
   isConfigured,
   loadConfig,
   refreshConfig,
@@ -21,12 +23,47 @@ import {
 
 const EJEMPLO = "https://abc123xyz.execute-api.us-east-1.amazonaws.com";
 
+/** Cómo se explica cada resultado de la sonda, sin jerga de HTTP. */
+function explicar(r: PingResult): { ok: boolean; texto: string } {
+  switch (r.estado) {
+    case "ok":
+      return { ok: true, texto: "Responde correctamente" };
+    case "sin-url":
+      return { ok: false, texto: "Falta la URL" };
+    case "inalcanzable":
+      return { ok: false, texto: "No responde: revisa que la URL esté bien copiada" };
+    case "ruta-desconocida":
+      return { ok: false, texto: "Responde, pero es la URL de otro microservicio" };
+  }
+}
+
 export function Settings({ standalone = false }: { standalone?: boolean }) {
   const navigate = useNavigate();
   const [config, setConfig] = useState<ApiConfig>(loadConfig);
   const [saved, setSaved] = useState(false);
+  const [prueba, setPrueba] = useState<Partial<Record<ServiceKey, PingResult>> | null>(null);
+  const [probando, setProbando] = useState(false);
 
   const completo = isConfigured(config);
+
+  /**
+   * Comprueba las seis URLs de una vez.
+   *
+   * Pegar seis URLs parecidas y equivocarse en una deja la aplicación medio
+   * rota en silencio —el progreso deja de guardarse, el quiz no arranca—, así
+   * que conviene poder verlo aquí en lugar de deducirlo pantalla por pantalla.
+   */
+  async function probar() {
+    saveConfig(config);
+    refreshConfig();
+    setProbando(true);
+    setPrueba(null);
+    const entradas = await Promise.all(
+      SERVICES.map(async ({ key }) => [key, await ping(key)] as const),
+    );
+    setPrueba(Object.fromEntries(entradas));
+    setProbando(false);
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -70,9 +107,31 @@ export function Settings({ standalone = false }: { standalone?: boolean }) {
           </p>
         )}
 
-        <Button type="submit" className="justify-self-start">
-          Guardar configuración
-        </Button>
+        {prueba && (
+          <ul className="grid gap-1.5 rounded-[10px] border border-line p-3.5">
+            {SERVICES.map(({ key, label }) => {
+              const r = prueba[key];
+              if (!r) return null;
+              const { ok, texto } = explicar(r);
+              return (
+                <li key={key} className="flex items-baseline gap-2 text-[13px]">
+                  <span aria-hidden="true" className={ok ? "text-mint-ink" : "text-coral"}>
+                    {ok ? "✓" : "✗"}
+                  </span>
+                  <span className="font-semibold">{label}</span>
+                  <span className={cx(ok ? "text-body" : "font-medium text-coral")}>{texto}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <div className="flex flex-wrap gap-2.5">
+          <Button type="submit">Guardar configuración</Button>
+          <Button type="button" variant="ghost" loading={probando} onClick={probar}>
+            Probar conexión
+          </Button>
+        </div>
       </Card>
     </form>
   );

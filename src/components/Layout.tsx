@@ -6,9 +6,12 @@ import { useAuth } from "../lib/auth";
 import { Logo } from "./icons";
 import { cx } from "./ui";
 
+// El orden sigue el recorrido de estudio: elegir tema, repasarlo, comprobar
+// con el quiz. «Inicio» no está porque el logo ya lleva ahí.
 const NAV = [
   { to: "/explorar", label: "Explorar" },
   { to: "/repasar", label: "Repasar" },
+  { to: "/quiz", label: "Quiz" },
   { to: "/mis-mazos", label: "Mis mazos" },
   { to: "/progreso", label: "Mi progreso" },
   { to: "/configuracion", label: "Configuración" },
@@ -16,7 +19,7 @@ const NAV = [
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return cx(
-    "text-sm transition-colors",
+    "whitespace-nowrap text-sm transition-colors",
     isActive ? "font-semibold text-brand" : "text-body hover:text-ink",
   );
 }
@@ -39,7 +42,7 @@ export function Header() {
           SkillPath
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-6 lg:flex">
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} className={navClass}>
               {item.label}
@@ -57,7 +60,7 @@ export function Header() {
         </nav>
 
         <button
-          className="md:hidden"
+          className="lg:hidden"
           onClick={() => setMenuOpen((open) => !open)}
           aria-expanded={menuOpen}
           aria-label="Abrir menú"
@@ -69,7 +72,7 @@ export function Header() {
       </div>
 
       {menuOpen && (
-        <nav className="grid gap-1 border-t border-line px-4 py-3 md:hidden">
+        <nav className="grid gap-1 border-t border-line px-4 py-3 lg:hidden">
           {NAV.map((item) => (
             <NavLink
               key={item.to}

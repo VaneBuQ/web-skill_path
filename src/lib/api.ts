@@ -56,6 +56,57 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
+/**
+ * Ruta de cada servicio que sirve para comprobar que su API Gateway responde.
+ *
+ * Se eligen rutas que existen y que fallan de forma reconocible sin sesión: lo
+ * que se comprueba es que la URL apunte al servicio correcto, no que la
+ * petición tenga éxito. Un 401 es una respuesta perfectamente válida aquí.
+ */
+const SONDA: Record<ServiceKey, { path: string; method?: string }> = {
+  auth: { path: "/auth/me" },
+  topics: { path: "/topics" },
+  flashcards: { path: "/flashcards/__sonda__" },
+  progress: { path: "/progress" },
+  quiz: { path: "/quiz/__sonda__" },
+  ia: { path: "/ia/history/__sonda__" },
+};
+
+export type PingResult =
+  | { estado: "ok"; status: number }
+  | { estado: "sin-url" }
+  | { estado: "inalcanzable" }
+  | { estado: "ruta-desconocida"; status: number };
+
+/**
+ * Comprueba que la URL configurada para un servicio responde y es la suya.
+ *
+ * Un 404 de API Gateway ("Not Found" sin nuestro envelope) significa que la
+ * URL es de otro servicio: es el error más fácil de cometer pegando seis URLs
+ * parecidas, y el que deja la aplicación en silencio.
+ */
+export async function ping(service: ServiceKey): Promise<PingResult> {
+  const base = apiBase(service);
+  if (!base) return { estado: "sin-url" };
+
+  const { path, method = "GET" } = SONDA[service];
+  let response: Response;
+  try {
+    response = await fetch(`${base}${path}`, { method });
+  } catch {
+    return { estado: "inalcanzable" };
+  }
+
+  // API Gateway responde {"message":"Not Found"} cuando la ruta no existe en
+  // esa API; nuestros handlers responden siempre {"error":{"code":...}}.
+  if (response.status === 404) {
+    const texto = await response.text();
+    if (!texto.includes('"error"')) return { estado: "ruta-desconocida", status: 404 };
+  }
+
+  return { estado: "ok", status: response.status };
+}
+
 interface RequestOptions {
   method?: string;
   body?: unknown;

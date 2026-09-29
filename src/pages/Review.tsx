@@ -28,9 +28,9 @@ import { ApiError, api } from "../lib/api";
 import { AI_MAX_ANSWER_WORDS, type AnswerCheck, type Rating } from "../lib/types";
 
 const CALIFICACIONES: { rating: Rating; label: string; className: string }[] = [
-  { rating: "easy", label: "Fácil", className: "bg-mint text-mint-ink hover:bg-mint/80" },
-  { rating: "hard", label: "Difícil", className: "bg-brand-soft text-brand hover:bg-brand-softer" },
-  { rating: "forgot", label: "Olvidé", className: "bg-coral-soft text-coral hover:bg-coral hover:text-white" },
+  { rating: "easy", label: "Dominado", className: "bg-mint text-mint-ink hover:bg-mint/80" },
+  { rating: "hard", label: "A medias", className: "bg-brand-soft text-brand hover:bg-brand-softer" },
+  { rating: "forgot", label: "Olvidado", className: "bg-coral-soft text-coral hover:bg-coral hover:text-white" },
 ];
 
 const VEREDICTO = {
@@ -56,6 +56,11 @@ export function Review() {
   const [check, setCheck] = useState<AnswerCheck | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [xpGanado, setXpGanado] = useState(0);
+  // El servicio de tarjetas actualiza el progreso llamando al de progreso. Si
+  // esa llamada falla responde progress: null y la calificación se guarda
+  // igual, así que sin avisar aquí el usuario ve que «el progreso no sube» sin
+  // ninguna pista de por qué.
+  const [progresoCaido, setProgresoCaido] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const sesion = useQuery({
@@ -81,6 +86,7 @@ export function Review() {
   const calificar = useMutation({
     mutationFn: (rating: Rating) => api.review(tarjeta!.cardId, topicId, rating),
     onSuccess: (result) => {
+      if (result.progress === null) setProgresoCaido(true);
       setXpGanado((xp) => xp + result.xpAwarded);
       setAnswer("");
       setCheck(null);
@@ -109,7 +115,16 @@ export function Review() {
   }
 
   const nombre = sesion.data!.topicName ?? topicId;
-  if (terminado) return <SesionTerminada nombre={nombre} repasadas={index} xp={xpGanado} />;
+  if (terminado) {
+    return (
+      <SesionTerminada
+        nombre={nombre}
+        repasadas={index}
+        xp={xpGanado}
+        progresoCaido={progresoCaido}
+      />
+    );
+  }
 
   const palabras = contarPalabras(answer);
   const excedido = palabras > AI_MAX_ANSWER_WORDS;
@@ -125,6 +140,8 @@ export function Review() {
         </div>
         <ProgressBar percent={(index / tarjetas.length) * 100} className="mt-2.5" />
       </div>
+
+      {progresoCaido && <AvisoProgreso />}
 
       <Card className="p-6 sm:p-7">
         <p className="text-[11.5px] font-bold uppercase tracking-[0.09em] text-body">
@@ -272,14 +289,30 @@ export function Review() {
 }
 
 /** Pantalla «No hay tarjetas pendientes por hoy» del prototipo. */
+/** El repaso se guardó, pero el progreso del tema no pudo actualizarse. */
+function AvisoProgreso() {
+  return (
+    <p
+      role="status"
+      className="rounded-card border border-amber-400/40 bg-amber-50 px-4 py-3 text-[13px] text-amber-800"
+    >
+      Tus respuestas se están guardando, pero el progreso del tema no se está
+      actualizando. Suele ser que la URL del servicio de progreso no quedó
+      configurada al desplegar; revísala en Configuración.
+    </p>
+  );
+}
+
 function SesionTerminada({
   nombre,
   repasadas,
   xp,
+  progresoCaido = false,
 }: {
   nombre: string;
   repasadas: number;
   xp: number;
+  progresoCaido?: boolean;
 }) {
   const primeraVez = repasadas === 0;
 
@@ -300,6 +333,8 @@ function SesionTerminada({
               xp > 0 ? ` y ganaste ${xp} XP` : ""
             }.`}
       </p>
+
+      {progresoCaido && <AvisoProgreso />}
 
       <div className="mt-3 flex flex-wrap justify-center gap-2.5">
         <LinkButton to="/inicio">Volver al inicio</LinkButton>
